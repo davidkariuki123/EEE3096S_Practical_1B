@@ -71,6 +71,12 @@ volatile uint32_t exec_ms_double[NUM_SIZES];    /* execution time (ms), double  
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 /* USER CODE BEGIN PFP */
+static void gate_led(GPIO_TypeDef *port, uint16_t pin, GPIO_PinState on);
+static void blink_once(GPIO_TypeDef *port, uint16_t pin, uint32_t ms);
+
+static void run_one_size_fixed(int N, int idx);
+static void run_one_size_double(int N, int idx);
+
 uint64_t calculate_mandelbrot_fixed_point_arithmetic(int width, int height, int max_iterations);
 uint64_t calculate_mandelbrot_double               (int width, int height, int max_iterations);
 /* USER CODE END PFP */
@@ -85,78 +91,38 @@ uint64_t calculate_mandelbrot_double               (int width, int height, int m
   */
 int main(void)
 {
-  /* USER CODE BEGIN 1 */
-  /* USER CODE END 1 */
-
   /* MCU Configuration--------------------------------------------------------*/
 
-  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
   HAL_Init();
-
-  /* USER CODE BEGIN Init */
-  /* USER CODE END Init */
-
-  /* Configure the system clock */
   SystemClock_Config();
-
-  /* USER CODE BEGIN SysInit */
-  /* USER CODE END SysInit */
-
-  /* Initialize all configured peripherals */
   MX_GPIO_Init();
 
   /* USER CODE BEGIN 2 */
-  /* Turn on LED0 to signify start of operations. PB0 configured as output in MX_GPIO_Init. */
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);
+  /* Phase A: indicate we're about to run fixed-point (LED0 ON). */
+  gate_led(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);
 
-  /* -------- Fixed-point runs for all required sizes -------- */
   for (int i = 0; i < NUM_SIZES; ++i)
   {
-    int N = IMAGE_SIZES[i];
-
-    start_time    = HAL_GetTick();
-    checksum      = calculate_mandelbrot_fixed_point_arithmetic(N, N, MAX_ITER);
-    end_time      = HAL_GetTick();
-    execution_time = end_time - start_time;
-
-    /* Save per-run results into arrays (watch these in Live Expressions) */
-    checksums_fixed[i] = checksum;
-    exec_ms_fixed[i]   = execution_time;
-
-    /* Blink LED0 briefly between runs so you can see progress on the board. */
-    HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_0);
-    HAL_Delay(150);
+    run_one_size_fixed(IMAGE_SIZES[i], i);
+    blink_once(GPIOB, GPIO_PIN_0, 150); /* brief progress flash */
   }
 
   /* Small pause to visually separate phases. */
   HAL_Delay(600);
 
-  /* Turn on LED1 to signify start of double-precision phase. */
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_SET);
+  /* Phase B: indicate we're about to run double (LED1 ON). */
+  gate_led(GPIOB, GPIO_PIN_1, GPIO_PIN_SET);
 
-  /* -------- Double-precision runs for all required sizes -------- */
   for (int i = 0; i < NUM_SIZES; ++i)
   {
-    int N = IMAGE_SIZES[i];
-
-    start_time    = HAL_GetTick();
-    checksum      = calculate_mandelbrot_double(N, N, MAX_ITER);
-    end_time      = HAL_GetTick();
-    execution_time = end_time - start_time;
-
-    /* Save per-run results into arrays (watch these in Live Expressions) */
-    checksums_double[i] = checksum;
-    exec_ms_double[i]   = execution_time;
-
-    /* Blink LED1 briefly between runs. */
-    HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_1);
-    HAL_Delay(150);
+    run_one_size_double(IMAGE_SIZES[i], i);
+    blink_once(GPIOB, GPIO_PIN_1, 150);
   }
 
   /* Hold LEDs on for a 1s delay, then turn both off. */
   HAL_Delay(1000);
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET);
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_RESET);
+  gate_led(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET);
+  gate_led(GPIOB, GPIO_PIN_1, GPIO_PIN_RESET);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -164,12 +130,49 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
-
     /* USER CODE BEGIN 3 */
     /* Idle forever; results are available in Live Expressions. */
   }
   /* USER CODE END 3 */
 }
+
+/* ---------- tiny helpers (LED gating & brief blink) ---------- */
+/* USER CODE BEGIN 4 */
+static void gate_led(GPIO_TypeDef *port, uint16_t pin, GPIO_PinState on)
+{
+  HAL_GPIO_WritePin(port, pin, on);
+}
+
+static void blink_once(GPIO_TypeDef *port, uint16_t pin, uint32_t ms)
+{
+  HAL_GPIO_TogglePin(port, pin);
+  HAL_Delay(ms);
+  HAL_GPIO_TogglePin(port, pin);
+}
+
+/* ---------- run one N for each kernel, capturing globals/arrays ---------- */
+static void run_one_size_fixed(int N, int idx)
+{
+  start_time     = HAL_GetTick();
+  checksum       = calculate_mandelbrot_fixed_point_arithmetic(N, N, MAX_ITER);
+  end_time       = HAL_GetTick();
+  execution_time = end_time - start_time;
+
+  checksums_fixed[idx] = checksum;
+  exec_ms_fixed[idx]   = execution_time;
+}
+
+static void run_one_size_double(int N, int idx)
+{
+  start_time     = HAL_GetTick();
+  checksum       = calculate_mandelbrot_double(N, N, MAX_ITER);
+  end_time       = HAL_GetTick();
+  execution_time = end_time - start_time;
+
+  checksums_double[idx] = checksum;
+  exec_ms_double[idx]   = execution_time;
+}
+/* USER CODE END 4 */
 
 /**
   * @brief System Clock Configuration
@@ -214,9 +217,6 @@ void SystemClock_Config(void)
 static void MX_GPIO_Init(void)
 {
   GPIO_InitTypeDef GPIO_InitStruct = {0};
-  /* USER CODE BEGIN MX_GPIO_Init_1 */
-  /* USER CODE END MX_GPIO_Init_1 */
-
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOB_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
@@ -230,16 +230,12 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull  = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-
-  /* USER CODE BEGIN MX_GPIO_Init_2 */
-  /* USER CODE END MX_GPIO_Init_2 */
 }
 
-/* USER CODE BEGIN 4 */
 /* --------------------------------------------------------------------------
  * Mandelbrot using fixed-point arithmetic (Q16.16 integers only).
  *
- * Algorithm follows the pseudocode in the brief; the complex plane mapping:
+ * Complex plane mapping:
  *   x0 = (x/width) * 3.5 - 2.5
  *   y0 = (y/height) * 2.0 - 1.0
  * Iteration:
@@ -254,21 +250,23 @@ uint64_t calculate_mandelbrot_fixed_point_arithmetic(int width, int height, int 
   uint64_t sum = 0;
 
   /* Pre-compute scaled constants in Q16.16 */
-  const int32_t scale_x  = FLOAT_TO_FIXED(3.5) / width;   /* 3.5/width  */
-  const int32_t scale_y  = FLOAT_TO_FIXED(2.0) / height;  /* 2.0/height */
-  const int32_t offset_x = FLOAT_TO_FIXED(-2.5);
-  const int32_t offset_y = FLOAT_TO_FIXED(-1.0);
-  const int32_t threshold = FLOAT_TO_FIXED(4.0);          /* compare against xi^2 + yi^2 */
+  const int32_t scale_x   = FLOAT_TO_FIXED(3.5) / width;   /* 3.5/width  */
+  const int32_t scale_y   = FLOAT_TO_FIXED(2.0) / height;  /* 2.0/height */
+  const int32_t offset_x  = FLOAT_TO_FIXED(-2.5);
+  const int32_t offset_y  = FLOAT_TO_FIXED(-1.0);
+  const int32_t threshold = FLOAT_TO_FIXED(4.0);           /* compare against xi^2 + yi^2 */
 
   for (int y = 0; y < height; ++y)
   {
     /* y0 = (y/height)*2.0 - 1.0 */
-    const int32_t y0 = fixed_mul((int32_t)y * FIXED_ONE, scale_y) + offset_y;
+    const int32_t y_scaled = (int32_t)y * FIXED_ONE;
+    const int32_t y0 = fixed_mul(y_scaled, scale_y) + offset_y;
 
     for (int x = 0; x < width; ++x)
     {
       /* x0 = (x/width)*3.5 - 2.5 */
-      const int32_t x0 = fixed_mul((int32_t)x * FIXED_ONE, scale_x) + offset_x;
+      const int32_t x_scaled = (int32_t)x * FIXED_ONE;
+      const int32_t x0 = fixed_mul(x_scaled, scale_x) + offset_x;
 
       int32_t xi = 0;    /* real(z)   in Q16.16 */
       int32_t yi = 0;    /* imag(z)   in Q16.16 */
@@ -276,7 +274,6 @@ uint64_t calculate_mandelbrot_fixed_point_arithmetic(int width, int height, int 
 
       while (iteration < max_iterations)
       {
-        /* xi^2 and yi^2 are still Q16.16 after fixed_mul */
         const int32_t xi2 = fixed_mul(xi, xi);
         const int32_t yi2 = fixed_mul(yi, yi);
 
@@ -287,10 +284,8 @@ uint64_t calculate_mandelbrot_fixed_point_arithmetic(int width, int height, int 
         /* temp = xi^2 - yi^2 (Q16.16) */
         const int32_t temp = xi2 - yi2;
 
-        /* yi = 2*xi*yi + y0:
-           fixed_mul(xi, yi) is Q16.16; multiply by 2 by left-shifting one or
-           multiplying by FIXED representation of 2. */
-        yi = ((fixed_mul(xi, yi) << 1)) + y0;
+        /* yi = 2*xi*yi + y0 */
+        yi = (fixed_mul(xi, yi) << 1) + y0;
 
         /* xi = temp + x0 */
         xi = temp + x0;
@@ -339,7 +334,6 @@ uint64_t calculate_mandelbrot_double(int width, int height, int max_iterations)
 
   return sum;
 }
-/* USER CODE END 4 */
 
 /**
   * @brief  This function is executed in case of error occurrence.
@@ -347,12 +341,10 @@ uint64_t calculate_mandelbrot_double(int width, int height, int max_iterations)
   */
 void Error_Handler(void)
 {
-  /* USER CODE BEGIN Error_Handler_Debug */
   __disable_irq();
   while (1)
   {
   }
-  /* USER CODE END Error_Handler_Debug */
 }
 
 #ifdef  USE_FULL_ASSERT
@@ -365,8 +357,6 @@ void Error_Handler(void)
   */
 void assert_failed(uint8_t *file, uint32_t line)
 {
-  /* USER CODE BEGIN 6 */
   (void)file; (void)line;
-  /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */
